@@ -15,7 +15,7 @@ Eventually, RedEyes might be generalized to handle other text-oriented protocols
 
 RedEyes has an API for constructing services, but does not yet have a compiler to a specific server backend. The current plan is to produce a native backend for scalaz-stream over raw NIO. 
 
-Many tests are missing and some of the internal workings (especially the existing encoding of GADTs and the use of modules to reuse code across Char and Api parsers) could be greatly improved.
+Many tests are missing and some of the interior surface area (especially the existing encoding of GADTs and the use of modules to reuse code across Char and Api parsers) could be greatly improved.
 
 Pull requests welcome!
 
@@ -27,11 +27,17 @@ This detailed history of the development of RedEyes is supplementary material fo
 
 October 12, 2010. The date of the first commit to the [BlueEyes repository](http://github.com/jdegoes/blueeyes).
 
-I was just discovering functional programming (in fact, 4 years later, I am *still* discovering functional programming!).
+I was just discovering functional programming.
 
-On the bright side, I had already picked up good habits over the years, including preferring immutable data structures, eschewing void-returning functions, mandating all `if` statements have corresponding `else` branches, and so on.
+In fact, 4 years later, I am *still* discovering functional programming!
 
-I disliked all the web frameworks out there because they made life so complicated. They were stateful. They assumed you wanted to print HTML on the server-side. They used lots of mutable data structures. And for most of them, dynamic typing in one form or another (e.g. templates) meant that a lot of things could go wrong at runtime.
+Fortunately, even back then I had picked up some good habits over the years, including preferring immutable data structures, eschewing void-accepting and void-returning functions, mandating all `if` statements have corresponding `else` branches, and so on.
+
+At the time, I was working for SocialMedia.com, a rich media adtech company with an API-driven ad server. 
+
+We had a *lot* of web APIs to build.
+
+I disliked all the web frameworks I knew about, because they made life complicated. They were very stateful and mutable, making them hard to reason about. They assumed you wanted to print HTML on the server-side. And most used dynamic typing in some part of the stack (e.g. templates), which meant a lot of things could go wrong at runtime.
 
 For my day job, I wanted a super simple, high-performance means of *rapidly* and *safely* creating HTTP services.
 
@@ -39,15 +45,15 @@ Out of that desire, BlueEyes was born.
 
 ## Wheels of Stone
 
-The core idea behind BlueEyes is that a web service is "just" a function from an HTTP request to a `Future` of response.
+The core idea behind BlueEyes is that a web service is "just" a function from a request to a response. Or for an asynchronous web service, you might say a function from a request to a `Future` of response.
 
-An early version in BlueEyes used a `type` synonym to describe this notion:
+The earliest versions of BlueEyes used a `type` synonym to describe this notion:
 
 ```scala
 type Handler[T] = (Map[Symbol, String], HttpRequest[T]) => Future[HttpResponse[T]]
 ```
 
-Though the exact form changed over time, this kernel of an idea, and sometimes even the BlueEyes composition syntax has been replicated in many other Scala frameworks (Spray, Finagle, Http4s, etc.).
+Though the exact form changed over time, this kernel of an idea (and sometimes even the BlueEyes composition syntax!) has been replicated in many other Scala frameworks (Spray, Finagle, Http4s, etc.).
 
 Initially, I didn't see the compositional properties in *service handlers as functions*. 
 
@@ -102,6 +108,10 @@ post {
 
 Over the days that followed, I *leveled-up*, as they say, and found out you could write a huge collection of combinators that allow you to create just about any HTTP REST API you want.
 
+Combinators to match paths. Combinators to match query string parameters. Combinators to match HTTP method types. Combinators to decode requests and encode responses. Combinators for alternation (try one handler, then try another handler).
+
+Combinators, combinators, combinators!
+
 Here's a simple example taken from Noel Welsh's [online book](http://noelwelsh.com/blueeyes/intro.html) on BlueEyes:
 
 ```scala
@@ -141,7 +151,7 @@ path("/multiply" / 'number1 / 'number2) {
 }
 ```
 
-For everything I got wrong &mdash; and I got a lot wrong, trust me! &mdash; I had discovered the compositional power of functional programming, and it was sweet nectar of the gods.
+For everything I got wrong &mdash; and trust me, I got a lot wrong! &mdash; I had discovered the compositional power of functional programming, and it was sweet nectar of the gods.
 
 ## The Dirty on Function Composition
 
@@ -155,37 +165,37 @@ Since a user of BlueEyes already specifies what forms of communication are suppo
 
 Unfortunately, that's just not possible.
 
-A request handler is just a function, and when you compose two request handlers, the result is another function. All information on the derivation of a function is sucked into a black hole (unless you dive into the unsafe, murky world of reflection, which some frameworks do!).
+A web service is just a function, and when you compose two functions, the result is another function. All information on the *derivation* of a function is sucked into a black hole (unless you dive into the unsafe, murky world of reflection, which some frameworks do!).
 
-Semantics are gone, all that's left is a function, which can tell you its domain and codomain, but nothing else.
+Semantics are gone, and all that's left is the function, whose type can tell you the domain and codomain, but nothing else.
 
-This loss of information, of the semantics of what the user is doing, turns out to have *rippling effects* downstream.
+This loss of information turns out to have *rippling effects* downstream.
 
-### Handlers
+### Internal Code
 
-Without semantics, users are forced to implement things like `OPTION` themselves, which means  code contains duplication.
+Without semantic information, users are forced to implement things like `OPTION` themselves, which means the code contains duplication.
 
 Not duplication of code, per se, which is easily factored out, but duplication of *information* &mdash; which is a less-recognized, but no less egregious form of duplication.
 
-This happens any time when the HTTP standard implies that supporting one thing also implies supporting something else.
+This happens anywhere the HTTP standard implies that supporting one thing also implies supporting something else.
 
 ### Documentation
 
-Most web APIs created are consumed by the public, or at least by engineers who didn't develop them. They're consumed in a variety of languages, ranging from Javascript front-ends to Haskell back-ends. 
+Most web services are consumed by the public, or at least by engineers who didn't develop them. They're consumed in a variety of programming languages, ranging from Javascript front-ends to Haskell back-ends. 
 
 You really can't choose what languages or technologies the consumers of your API use.
 
-As a result, the most successful APIs are ones that have been well-documented.
+As a result, the most successful APIs are ones that have been *well-documented*.
 
 Unfortunately, documenting a service also involves its own form of duplication.
 
-Your code is already expressing the fact that you support an HTTP GET method with such and such a path, and which requires some content type and produces another.
+Let's say you write a handler to support HTTP GET with such and such a path, which requires some content type and produces another.
 
-Why should you have to replicate that information in English, when at some level, the same information is already encoded into your program?
+If you want to document this service, you'll have to replicate the exact same information in English! Why should you have to do that, when the information is already encoded into your program?
 
 Indeed, documenting APIs, and keeping that documentation accurate and in sync with the code base, remains one of the biggest pains of developing and maintaining web APIs.
 
-It was a big pain at SocialMedia.com, the company where I developed BlueEyes, and it was an even bigger pain at Precog, the next company I started. Countless weeks were spent writing and re-writing documentation when we changed the API, and yet more time was spent helping customers track down problems caused by missing or inaccurate documentation.
+It was a big pain at SocialMedia.com, the company where I initially developed BlueEyes, and it was an even bigger pain at Precog, the next company I started. Countless weeks were spent writing and re-writing documentation when we changed the API, and yet more time was spent helping customers track down problems caused by missing or inaccurate documentation.
 
 ### Client Libraries
 

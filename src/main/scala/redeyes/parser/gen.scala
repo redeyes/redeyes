@@ -81,7 +81,7 @@ trait ExampleGenerator { self: ParserModule =>
             rightGen <- generate0(right)
           } yield leftGen.zip(rightGen).filter((x.equal.equal _).tupled).map(_._1)
 
-        case Zip(left, right) => ???
+        case Zip(left, right) =>
           for {
             left     <- left
             right    <- right

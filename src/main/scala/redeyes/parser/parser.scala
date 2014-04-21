@@ -58,7 +58,7 @@ trait ParserModule { self =>
    * The core parser abstraction, with a range of combinators.
    */
   sealed trait Parser[A] {
-    import Parser.ParserIsoApplicative._
+    import Parser.ParserEquivApplicative._
 
     final def |> [B] (f: => A <=> B): Parser[B] = this <**> Pure(f)
     
@@ -146,7 +146,7 @@ trait ParserModule { self =>
       def append(a1: Parser[A], a2: => Parser[A]) = a1 <|> a2
     }  
 
-    implicit val ParserIsoApplicative = new IsoApplicative[Parser] {
+    implicit val ParserEquivApplicative = new EquivApplicative[Parser] {
       def point[A](a: => A): Parser[A] = Pure(a)
 
       def ap1[A, B](fa: => Parser[A])(f: => Parser[A <=> B]): Parser[B] = Apply(Need(f), Need(fa))

@@ -1,13 +1,13 @@
 package redeyes.parser
 
 
-trait IsoFunctor[F[_]] {
+trait EquivFunctor[F[_]] {
   def map[A, B](fa: => F[A])(f: A <=> B): F[B]
 
   final def unmap[A, B](fb: => F[B])(f: A <=> B): F[A] = map(fb)(f.inverse)
 }
 
-trait IsoZip[F[_]] extends IsoFunctor[F] {
+trait EquivZip[F[_]] extends EquivFunctor[F] {
   def zip[A, B](fa: => F[A], fb: => F[B]): F[(A, B)]
 
   def zip3[A, B, C](fa: => F[A], fb: => F[B], fc: => F[C]): F[(A, B, C)] = 
@@ -35,7 +35,7 @@ trait IsoZip[F[_]] extends IsoFunctor[F] {
     ))
 }
 
-trait IsoApply[F[_]] extends IsoZip[F] {  
+trait EquivApply[F[_]] extends EquivZip[F] {  
   def ap1[A,B](fa: => F[A])(f: => F[A <=> B]): F[B]  
 
   final def ap2[A,B,Z](fa: => F[A], fb: => F[B])(ff: F[(A,B) <=> Z]): F[Z] = 
@@ -72,7 +72,7 @@ trait IsoApply[F[_]] extends IsoZip[F] {
     ap1(fz)(map[(A, B, C, D, E, G) <=> Z, Z <=> (A, B, C, D, E, G)](ff)(Equiv(_.inverse, _.inverse)))  
 }
 
-trait IsoApplicative[F[_]] extends IsoApply[F] {
+trait EquivApplicative[F[_]] extends EquivApply[F] {
   def point[A](a: => A): F[A]
 
   final def apply1[A, B](fa: => F[A])(f: => A <=> B): F[B] = ap1(fa)(point(f))
