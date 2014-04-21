@@ -1,4 +1,3 @@
-
 # Introduction
 
 This is an early, experimental preview release of RedEyes.
@@ -377,7 +376,7 @@ case class Header(name: String) extends Parser[String]
 case class Query(name: String) extends Parser[String]
 case class Content[A](decoder: Array[Byte] => A) extends Parser[A]
 case class Pure[A](a: A) extends Parser[A]
-case class Apply[A, B](fa: Parser[A], ff: F[A => B]) extends Parser[B]
+case class Apply[A, B](fa: Parser[A], ff: Parser[A => B]) extends Parser[B]
 ```
 
 The constructor `Apply` represent a *description* of mapping and application, but they perform no computation. Their types represent *promises* that such a computation is possible (while a type-safe implementation would represent a proof that such promises are actually possible to keep).
@@ -390,7 +389,7 @@ implicit val ParserApplicative = new Applicative[Parser] {
 
   def map[A, B](fa: => Parser[A])(f: A => B): Parser[B] = ap(fa)(point(f))
 
-  def ap[A, B](fa: => Parser[A])(ff: F[A => B]): Parser[B] = Apply(fa, ff)
+  def ap[A, B](fa: => Parser[A])(ff: Parser[A => B]): Parser[B] = Apply(fa, ff)
 }
 ```
 
