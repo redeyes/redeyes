@@ -64,9 +64,9 @@ trait ParserModule { self =>
     
     final def <**> [B] (that: => Parser[A <=> B]): Parser[B] = Apply[A, B](Need(that), Need(this))
     
-    final def <~< [B] (that: => Parser[B]): Parser[A] = lift2[A, B, A](Equiv.id[A].left(generate1(that)))(this, that)
+    final def <~< [B] (that: => Parser[B]): Parser[A] = lift2[A, B, A](Equiv.id[A].leftfst(generate1(that)))(this, that)
     
-    final def >~> [B] (that: => Parser[B]): Parser[B] = lift2[A, B, B](Equiv.id[B].right(generate1(this)))(this, that)
+    final def >~> [B] (that: => Parser[B]): Parser[B] = lift2[A, B, B](Equiv.id[B].leftsnd(generate1(this)))(this, that)
     
     final def <|> (that: => Parser[A]): Parser[A] = Or(Need(this), Need(that))
     

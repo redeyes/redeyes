@@ -26,9 +26,13 @@ final case class Equiv[A, B](to: A => B, from: B => A) extends Function1[A, B] {
     from  = from compose that.from
   )
 
-  def left[C](c: C): Equiv[(A, C), B] = Equiv(to = t => apply(t._1), from = b => (unapply(b), c))
+  def leftfst[C](c: C): Equiv[(A, C), B] = Equiv(to = t => apply(t._1), from = b => (unapply(b), c))
 
-  def right[C](c: C): Equiv[(C, A), B] = Equiv(to = t => apply(t._2), from = b => (c, unapply(b)))
+  def leftsnd[C](c: C): Equiv[(C, A), B] = Equiv(to = t => apply(t._2), from = b => (c, unapply(b)))
+
+  def rightfst[C](c: C): Equiv[A, (B, C)] = Equiv(to = a => (apply(a), c), from = bc => unapply(bc._1))
+
+  def rightsnd[C](c: C): Equiv[A, (C, B)] = Equiv(to = a => (c, apply(a)), from = cb => unapply(cb._2))
 }
 object Equiv {
   def const[A, B](a: A, b: B): Equiv[A, B] = Equiv(to = a => b, from = b => a)
