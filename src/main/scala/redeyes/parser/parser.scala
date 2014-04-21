@@ -153,7 +153,7 @@ trait ParserModule { self =>
 
       def map[A, B](fa: => Parser[A])(f: A <=> B): Parser[B] = Map(Need(fa), f)
 
-      def zip[A, B](fa: => Parser[A], fb: => Parser[B]): Parser[(A, B)] = zip2(fa, fb)
+      def zip2[A, B](fa: => Parser[A], fb: => Parser[B]): Parser[(A, B)] = zip2(fa, fb)
     }
   }
 

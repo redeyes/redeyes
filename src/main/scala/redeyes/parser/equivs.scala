@@ -8,28 +8,28 @@ trait EquivFunctor[F[_]] {
 }
 
 trait EquivZip[F[_]] extends EquivFunctor[F] {
-  def zip[A, B](fa: => F[A], fb: => F[B]): F[(A, B)]
+  def zip2[A, B](fa: => F[A], fb: => F[B]): F[(A, B)]
 
   def zip3[A, B, C](fa: => F[A], fb: => F[B], fc: => F[C]): F[(A, B, C)] = 
-    map(zip(zip(fa, fb), fc))(Equiv(
+    map(zip2(zip2(fa, fb), fc))(Equiv(
       { case ((a, b), c) => (a, b, c) },
       { case (a, b, c)   => ((a, b), c)}
     ))
 
   def zip4[A, B, C, D](fa: => F[A], fb: => F[B], fc: => F[C], fd: => F[D]): F[(A, B, C, D)] = 
-    map(zip(zip3(fa, fb, fc), fd))(Equiv(
+    map(zip2(zip3(fa, fb, fc), fd))(Equiv(
       { case ((a, b, c), d) => (a, b, c, d) },
       { case (a, b, c, d)   => ((a, b, c), d)}
     ))
 
   def zip5[A, B, C, D, E](fa: => F[A], fb: => F[B], fc: => F[C], fd: => F[D], fe: => F[E]): F[(A, B, C, D, E)] = 
-    map(zip(zip4(fa, fb, fc, fd), fe))(Equiv(
+    map(zip2(zip4(fa, fb, fc, fd), fe))(Equiv(
       { case ((a, b, c, d), e) => (a, b, c, d, e) },
       { case (a, b, c, d, e)   => ((a, b, c, d), e)}
     ))
 
   def zip6[A, B, C, D, E, G](fa: => F[A], fb: => F[B], fc: => F[C], fd: => F[D], fe: => F[E], fg: => F[G]): F[(A, B, C, D, E, G)] = 
-    map(zip(zip5(fa, fb, fc, fd, fe), fg))(Equiv(
+    map(zip2(zip5(fa, fb, fc, fd, fe), fg))(Equiv(
       { case ((a, b, c, d, e), g) => (a, b, c, d, e, g) },
       { case (a, b, c, d, e, g)   => ((a, b, c, d, e), g)}
     ))
@@ -39,7 +39,7 @@ trait EquivApply[F[_]] extends EquivZip[F] {
   def ap1[A,B](fa: => F[A])(f: => F[A <=> B]): F[B]  
 
   final def ap2[A,B,Z](fa: => F[A], fb: => F[B])(ff: F[(A,B) <=> Z]): F[Z] = 
-    ap1(zip(fa, fb))(ff)
+    ap1(zip2(fa, fb))(ff)
 
   final def ap3[A,B,C,Z](fa: => F[A], fb: => F[B], fc: => F[C])(ff: F[(A,B,C) <=> Z]): F[Z] = 
     ap1(zip3(fa, fb, fc))(ff)
