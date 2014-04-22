@@ -1,12 +1,27 @@
 package redeyes.parser
 
 
+/**
+ * Equivalence functor. Or something.
+ *
+ * All instances must obey:
+ *
+ * map(fa)(Equiv.id) = fa
+ * map(fa)(f <> g) = map(map(fa)(f))(g)
+ * 
+ * unmap(fb)(Equiv.id) = fb
+ * unmap(fb)(f <> g) = unmap(unmap(fb)(f))(g)
+ * 
+ */
 trait EquivFunctor[F[_]] {
   def map[A, B](fa: => F[A])(f: A <=> B): F[B]
 
   final def unmap[A, B](fb: => F[B])(f: A <=> B): F[A] = map(fb)(f.inverse)
 }
 
+/**
+ * Equivalence zippable functor. I believe all the laws are "theorems for free".
+ */
 trait EquivZip[F[_]] extends EquivFunctor[F] {
   def zip2[A, B](fa: => F[A], fb: => F[B]): F[(A, B)]
 
@@ -35,6 +50,13 @@ trait EquivZip[F[_]] extends EquivFunctor[F] {
     ))
 }
 
+/**
+ * Equivalence Apply. 
+ *
+ * All instances must obey:
+ *
+ * ap1(fa)(ffab <> ffbc) = ap1(ap1(fa)(ffab))(ffbc)
+ */
 trait EquivApply[F[_]] extends EquivZip[F] {  
   def ap1[A,B](fa: => F[A])(f: => F[A <=> B]): F[B]  
 
@@ -72,6 +94,11 @@ trait EquivApply[F[_]] extends EquivZip[F] {
     ap1(fz)(map[(A, B, C, D, E, G) <=> Z, Z <=> (A, B, C, D, E, G)](ff)(Equiv(_.inverse, _.inverse)))  
 }
 
+/**
+ * Equivalence Applicative.
+ *
+ * TODO: Laws similar to Applicative.
+ */
 trait EquivApplicative[F[_]] extends EquivApply[F] {
   def point[A](a: => A): F[A]
 

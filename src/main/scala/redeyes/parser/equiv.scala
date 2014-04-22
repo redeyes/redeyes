@@ -51,7 +51,7 @@ object Equiv {
 
   def id[A]: Equiv[A, A] = Equiv(identity[A] _, identity[A] _)
 
-  def fail[A](msg: String): Equiv[A, A] = Equiv(Function.const(sys.error(msg)), Function.const(sys.error(msg)))
+  def undefined[A, B](msg: String): Equiv[A, B] = Equiv(Function.const(sys.error(msg)), Function.const(sys.error(msg)))
 
   // TODO: Shapeless Generic[A]???
 }
