@@ -188,7 +188,7 @@ As a result, the most successful APIs are ones that have been *well-documented*.
 
 Unfortunately, documenting a service also involves its own form of duplication.
 
-Let's say you write a handler to support HTTP GET with such and such a path, which requires some content type and produces another.
+Let's say you write a handler to support HTTP GET with a particular path, which requires some content type and produces another.
 
 If you want to document this service, you'll have to replicate the exact same information in English! Why should you have to do that, when the information is already encoded into your program?
 
@@ -198,19 +198,17 @@ It was a big pain at SocialMedia.com, the company where I initially developed Bl
 
 ### Client Libraries
 
-Sometimes, all you need to expose your services is the web API. But other times, the barrier of entry is still too high, and to lower that barrier, you end up needing to create client libraries.
+Sometimes, all you need are well-documented web APIs. But other times, the barrier of entry to using those APIs is still too high, and to lower that barrier, you end up needing to create *client libraries*.
 
 Client libraries wrap the web API and provide language-specific, idiomatic interfaces to the same functionality.
 
 Like documentation, they are extremely painful to develop and keep up to date. You often need to create 4 - 6 different client libraries, one for every mainstream programming language (plus 1 for the niche functional language that you use!).
 
-It will take at least 2 weeks to develop a minimal client library for a relatively straightforward API, so we are talking months at the minimum to support mainstream languages.
+It takes at least 2 weeks to develop a minimal client library for a relatively straightforward API. Multiply that by the number of languages, and then include the cost of keeping all client libraries in sync with the API, and we are taking about a huge amount of effort.
 
-As with documentation, your code already describes what your web API expects.
+As with documentation, though, your program already encodes what your web API expects. Wouldn't it be nice if you could somehow use this information to avoid manually developing client libraries?
 
-Wouldn't it be nice if you could somehow use this information to avoid manually developing client libraries?
-
-## Fling with Metadata
+## A Short Fling with Metadata
 
 For a while, [Kris Nuttycombe](http://twitter.com/nuttycom) and I thought the answer to this problem might lie in metadata.
 
@@ -238,9 +236,11 @@ This approach was a definite improvement, but still suffered from a number of li
  1. Developers still had to write documentation, albeit not for everything (built-in services shipped with documentation) and they could keep their documentation alongside the code to make it easier to keep in sync.
  2. It didn't address duplication in request handlers or client libraries.
 
-Clearly, some better abstraction was needed to allow developers to describe their services, and then based on that description, generate request handlers, documentation, and so forth. A sort of *cross-compilation* of *service descriptors* to multiple targets, if you will.
+I wanted a better abstraction. Something that allowed developers to describe their services one time, and then based on that description, generate request handlers, documentation, client libraries, and so forth.
 
-But what that abstraction looked like remained a complete mystery for a long while.
+A sort of *cross-compilation* of *web service descriptors* to multiple targets, if you will.
+
+But what that abstraction looked like remained a complete mystery for a long time.
 
 ## The Long Winter
 
@@ -252,13 +252,13 @@ But I did think about BlueEyes, and about possible solutions to the problem of d
 
 In June 2013, my company Precog was acquired by RichRelevance. I stuck around for a few months, but decided I didn't want to work there, so I left and joined the ranks of independent consultants. A hired gun for anything from architecture to implementation.
 
-After 2 years of stagnation, I finally had a chance to code again. To read papers. To dig into good libraries. To level-up as a functional programmer.
+After 2 years of stagnation, I finally had a chance to code again. To read blogs and papers. To dig into good libraries. To level-up as a functional programmer.
 
-It was in December 2013 that I read in a blog post somewhere that applicative functors were suited for static analysis, while monads were not.
+Some time in December 2013, I read in a blog post mentioning that applicative functors were suited for "static analysis", while monads were not.
 
-I thought static analysis of "service descriptors" might be a way to generate multiple things from the same description: request handlers, documentation, maybe even client libraries.
+Even though not understanding exactly how, I thought static analysis of "web service descriptors" might be a way to generate multiple things from the same description: request handlers, documentation, maybe even client libraries.
 
-*That* caught my attention.
+*That* caught my attention, so I started to dig in and learn more.
 
 ## Applicative Functors to the Rescue
 
@@ -283,25 +283,27 @@ Compare this with the `Monad` type class, which inherits all of the above but ad
 def bind[A, B](fa: F[A])(f: A => F[B]): F[B]
 ```
 
-Compare the function `ap` to the function `bind`. They are obviously similar, and in fact they're often used for the same purpose.
+Specifically, compare the function `ap` to the function `bind`.
+
+These functions are obviously similar, and in fact they're often used for the same purpose.
 
 Both `bind` and `ap` accept a functor, as well as a function that uses a value inside the functor to produce a value of a different type.
 
 In other words, both `bind` and `ap` are "transformation" functions. They transform the value inside the functor to a value of another type. 
 
-The differences in the types tells you everything you need to know:
+The differences in the types tells you *everything* you need to know:
 
-> **When you call `bind` you can, at runtime, decide which `F[B]` you want to produce based on the value of `A`. However, when you call `ap`, you have already decided on both `F[A]` and `F[A => B]`. Your only runtime decision is which `B` you want to produce given an `A`.**
+> **When you call `bind`, your function can decide at "runtime" (for deferred monads) which `F[B]` to produce based on the value of `A`. However, when you call `ap`, you have already decided on both `F[A]` and `F[A => B]`. Your only runtime decision is which `B` you want to produce given an `A`.**
 
-Monads allow context-sensitive transformations, while merely applicative functors deny them.
+Monads allow *context-sensitive* transformations, while merely applicative functors deny them.
 
 This is what makes monads so ungodly powerful. But with great power comes, well: a black box that you can't peer into.
 
-With `Applicative` functors, you can peek in the box.
+With `Applicative` functors, you can peek into the box!
 
 ### Peering into Applicative Functors
 
-One of the simplest possible `Applicative` functors is `Option`.
+To demonstrate what I mean by peeking into the box, let's look at `Option`. `Option` is one of the simplest possible `Applicative` functors.
 
 If we're writing the implementation of `ap`, we know whether `F[A]` is `Some[A]` or `None`, and we know whether `F[A => B]` is `Some[A => B]` or `None`. In fact, here's some code to discriminate on all the possibilities:
 
@@ -315,7 +317,7 @@ def ap[A](fa: Option[A])(f: Option[A => B]): Option[B] = (fa, f) match {
 
 Contrast this to the implementation of `bind` for `Option`: we can't know whether the `F[B]` produced by `A => F[B]` is `Some[B]` or `None` until we have a value of `A` to feed to the function `A => F[B]`.
 
-This doesn't matter for `Option` so much, but consider what happens if we are building a description of a web service: if `A` is a value generated by a request (or produced by a response), we're not going to have access to that until runtime.
+This doesn't matter for `Option` so much (because its `bind` method is not deferred), but consider what happens if we are building a description of a web service: if `A` is a value generated by a request (or produced by a response), we're not going to have access to that until runtime.
 
 This is the reason why a monadic interface to building a web service description will fail, while an applicative interface can succeed.
 

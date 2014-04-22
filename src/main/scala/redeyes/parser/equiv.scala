@@ -3,16 +3,28 @@ package redeyes.parser
 /**
  * Defines an equivalence between types A and B.
  * 
- * Let ~_A be an equivalence relation on A, and ~_B be an equivalence relation on B.
- * Then Equiv[A, B](to, from) must satisfy the following laws:
+ * Let ~_A be an equivalence relation on A, and ~_B be an equivalence relation
+ * on B.
  *
- * 1. forall a in A. (from compose to)(a) ~_A a
- * 2. forall b in B. (to compose from)(b) ~_B b
+ * Let [a] denote the equivalence class of a in A ({a' | a ~_A a'}), and [b] 
+ * denote the equivalence class of b in B ({b' | b ~_B b'}).
  *
- * Another way to define this is as a bijection between the equivalence classes of A,
- * and the equivalence classes of B, together with two choice functions c_A and c_B,
- * which given an equivalence class, will deterministically choose an arbitrary element
- * of those classes ("canonical element").
+ * Let `f: {[a] | a in A} -> {[b] | b in B]`, 'g: {[b] | b in B} -> {[a] | a in A}' 
+ * define a bijection between the equivalence classes of A and B.
+ *
+ * Let `c_A: [a] -> a`  and `c_B: [b] -> b` define two choice functions, which 
+ * will map every equivalence class to a choice of one element in that class 
+ * ("canonical element").
+ *
+ * Equiv[A, B](to, from) is then defined as follows:
+ *
+ * to(a)   = c_B(f([a]))
+ * from(b) = c_A(g([b]))
+ *
+ * An equivalence between types A and B is *not* an isomorphism, because it 
+ * does not satisfy the identity laws. It is, however, more general than an
+ * isomorphism and is closely related to equivalence categories in category 
+ * theory.
  */ 
 final case class Equiv[A, B](to: A => B, from: B => A) extends Function1[A, B] { self =>
   def apply(a: A): B = to(a)
