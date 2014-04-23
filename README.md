@@ -236,9 +236,11 @@ This approach was a definite improvement, but still suffered from a number of li
  1. Developers still had to write documentation, albeit not for everything (built-in services shipped with documentation) and they could keep their documentation alongside the code to make it easier to keep in sync.
  2. It didn't address duplication in request handlers or client libraries.
 
-I wanted a better abstraction. Something that allowed developers to describe their services one time, and then based on that description, generate request handlers, documentation, client libraries, and so forth.
+I wanted a better abstraction. Something that allowed developers to *describe* their services one time, and then based on that *description*, generate a server, documentation, client libraries, and so forth.
 
 A sort of *cross-compilation* of *web service descriptors* to multiple targets, if you will.
+
+I needed an abstraction to allow me to describe web services.
 
 But what that abstraction looked like remained a complete mystery for a long time.
 
@@ -250,15 +252,19 @@ Meanwhile, I wasn't coding anymore, and my rate of learning slowed to a crawl. I
 
 But I did think about BlueEyes, and about possible solutions to the problem of duplicated information.
 
-In June 2013, my company Precog was acquired by RichRelevance. I stuck around for a few months, but decided I didn't want to work there, so I left and joined the ranks of independent consultants. A hired gun for anything from architecture to implementation.
+In June 2013, my company Precog was acquired by RichRelevance. I stuck around for a few months, but decided I didn't want to work there, so I left and joined the ranks of independent consultants.
 
-After 2 years of stagnation, I finally had a chance to code again. To read blogs and papers. To dig into good libraries. To level-up as a functional programmer.
+A hired gun for anything from architecture to implementation.
 
-Some time in December 2013, I read in a blog post mentioning that applicative functors were suited for "static analysis", while monads were not.
+After 2 years of stagnation, I finally had a chance to code again. To read blogs and papers. To dig into and study good libraries. To level-up as a functional programmer.
+
+### Breakthrough
+
+Some time in early December 2013, I read in a blog post mentioning that applicative functors were suited for "static analysis", while monads were not.
 
 Even though not understanding exactly how, I thought static analysis of "web service descriptors" might be a way to generate multiple things from the same description: request handlers, documentation, maybe even client libraries.
 
-*That* caught my attention, so I started to dig in and learn more.
+*That* caught my attention.
 
 ## Applicative Functors to the Rescue
 
@@ -266,7 +272,9 @@ Every monad forms an applicative functor, but most libraries that implement an a
 
 As a result, I always used monadic interfaces, and never closely examined the differences between the two.
 
-But reading that blog post made me stop and think. I immediately dug into the `Applicative` functor type class:
+But reading that blog post made me stop and think. I immediately dug into the `Applicative` functor type class.
+
+The most relevant methods are shown below:
 
 ```scala
 def map[A, B](fa: F[A])(f: A => B): F[B]
@@ -277,7 +285,7 @@ def point[A](a: => A): F[A]
 
 ```
 
-Compare this with the `Monad` type class, which inherits all of the above but adds the following functionality:
+Compare this definition to the `Monad` type class, which inherits all of the above but adds the following functionality:
 
 ```scala
 def bind[A, B](fa: F[A])(f: A => F[B]): F[B]
@@ -287,15 +295,15 @@ Specifically, compare the function `ap` to the function `bind`.
 
 These functions are obviously similar, and in fact they're often used for the same purpose.
 
-Both `bind` and `ap` accept a functor, as well as a function that uses a value inside the functor to produce a value of a different type.
+Both `bind` and `ap` accept a functor (which is monadic or applicative, respectively), as well as a function that uses a value inside the functor to produce a value of a different type.
 
-In other words, both `bind` and `ap` are "transformation" functions. They transform the value inside the functor to a value of another type. 
+Essentially, `bind` and `ap` are "transformation" functions. They transform the value inside the functor to a value of another type. 
 
-The differences in the types tells you *everything* you need to know:
+The differences in the types tell you *everything* you need to know:
 
-> **When you call `bind`, your function can decide at "runtime" (for deferred monads) which `F[B]` to produce based on the value of `A`. However, when you call `ap`, you have already decided on both `F[A]` and `F[A => B]`. Your only runtime decision is which `B` you want to produce given an `A`.**
+> **When you call `bind`, your function can decide at "runtime" which `F[B]` to produce based on the value of `A`. However, when you call `ap`, you have already decided on both `F[A]` and `F[A => B]`. Your only "runtime" decision is which `B` you want to produce given an `A`.**
 
-Monads allow *context-sensitive* transformations, while merely applicative functors deny them.
+Thus, monads allow *context-sensitive* transformations, while merely applicative functors deny them.
 
 This is what makes monads so ungodly powerful. But with great power comes, well: a black box that you can't peer into.
 
@@ -303,7 +311,7 @@ With `Applicative` functors, you can peek into the box!
 
 ### Peering into Applicative Functors
 
-To demonstrate what I mean by peeking into the box, let's look at `Option`. `Option` is one of the simplest possible `Applicative` functors.
+To demonstrate what I mean, let's look at `Option`. `Option` is one of the simplest possible `Applicative` functors.
 
 If we're writing the implementation of `ap`, we know whether `F[A]` is `Some[A]` or `None`, and we know whether `F[A => B]` is `Some[A => B]` or `None`. In fact, here's some code to discriminate on all the possibilities:
 
@@ -315,40 +323,46 @@ def ap[A](fa: Option[A])(f: Option[A => B]): Option[B] = (fa, f) match {
 }
 ```
 
-Contrast this to the implementation of `bind` for `Option`: we can't know whether the `F[B]` produced by `A => F[B]` is `Some[B]` or `None` until we have a value of `A` to feed to the function `A => F[B]`.
+Contrast this to the implementation of `bind` for `Option`: we can't know whether the `F[B]` produced by `A => F[B]` is `Some[B]` or `None` until we actually have a value of `A` to feed to the function `A => F[B]`.
 
-This doesn't matter for `Option` so much (because its `bind` method is not deferred), but consider what happens if we are building a description of a web service: if `A` is a value generated by a request (or produced by a response), we're not going to have access to that until runtime.
+This doesn't matter for `Option` so much (because it's just a simple type that either contains a value or does not), but consider what happens if we are building a description of a web service: if `A` is a value generated by a request (or produced by a response), we're not going to have access to that value until we actually serve up a request (or a response).
 
-This is the reason why a monadic interface to building a web service description will fail, while an applicative interface can succeed.
+This is the reason why a monadic interface to building a web service description cannot be used to generate multiple representations: the "design" of the web service cannot be inspected until runtime, and at runtime, the "design" may change based on runtime values.
+
+Applicatives have none of these issues.
 
 ## Applicative...Parser Combinators!
 
 After I understood the core distinction between monads and mere applicative functors, I tried to come up with an applicative interface for building service descriptions.
 
-My first attempt (a few lines of code I don't have anymore!) didn't go anywhere. But I didn't stop thinking about the problem.
+My first attempt (a few lines of code I don't remember!) didn't go anywhere. But I didn't stop thinking about the problem.
 
-I tried again in January of 2014. This time, something popped out: describing web services is a *lot* like describing a grammar using parser combinators.
+I tried again in January of 2014.
 
-When you describe a parser using parser combinators, you put constraints on input and promise values in return.
+This time, something occurred to me: describing web services is a *lot* like describing a grammar using parser combinators.
+
+When you describe a parser using parser combinators, you put constraints on input and promise to produce values.
 
 That's a bit like a web service, isn't it?
 
-Yes, indeed, with a little difference that bears discussing.
-
 ### Almost, Anyway
 
-Parsers classically operate on linearly ordered input. While the HTTP protocol is indeed itself linear, describing it with classic parser combinators is extremely cumbersome, because you have to order all your combinators in the order defined in the HTTP spec.
+Parsers classically operate on linearly ordered input. While the HTTP protocol is indeed itself linear, describing it with classic parser combinators is cumbersome, because you have to order all your combinators in the order defined in the HTTP spec.
 
-Moreover, with classic parsers, you have to ignore a lot of stuff that you consider irrelevant (browsers, for example, send all sorts of headers probably not required by your web service). Encoding all the stuff your web service *doesn't* need would be very tedious and doesn't serve much point.
+Moreover, with classic parser combinators, you have to ignore a lot of stuff that you consider irrelevant (browsers, for example, send all sorts of headers probably not required by your web service).
 
-So we need to do two things:
+Encoding all the stuff your web service *doesn't need* would be very tedious and doesn't serve much point.
+
+The solution is simplest enough. Don't use *classic* parser combinators!
+
+In particular, I realized I could do the following:
 
  1. Break with the convention of a single input source so that parsers can "consume" input from the different types of data encoded in an HTTP request (headers, query strings, content, URLs, methods, etc.).
- 2. Depending on the type of data, break with the convention of linearity of input. For example, you shouldn't have to choose an order if your web service requires both the header `Content-Type` and the header `Accept`. (Technically, this can and probably should be solved with a combinator that has order-independent parsing -- which is possible to do in a type-safe way using dependent types.)
+ 2. For all types of data except content, allow the user to "consume" elements out of order (e.g. consuming a `Content-Type` header before an `Accept` header, assuming the request contains both).
 
 I'm sure these things have a name, but for now I'm going with *multi-channel parser combinators*, defined as follows:
 
-> **Multi-channel parser combinators are combinators that allow you to produce a single value by consuming from a variety of channels, not necessarily in a linear fashion.**
+> **Multi-channel parser combinators are combinators that allow you to produce a single value by consuming input from a variety of channels, not necessarily in a linear fashion.**
 
 RedEyes is built on this foundation.
 
@@ -356,7 +370,7 @@ RedEyes is built on this foundation.
 
 At this point, you can probably imagine what our parser combinators are going to look like.
 
-Here's a super simplified version that hints at the direction:
+Here's a super greatly version that hints at the direction:
 
 ```scala
 sealed trait Parser[A]
@@ -366,7 +380,7 @@ case class Content[A](decoder: Array[Byte] => A) extends Parser[A]
 ...
 ```
 
-So our `Parser` is a generalized algebraic data type that *describes* our parsers, but contains no functionality (it's like a functor for a free monad, if you're familiar with that method of encoding effects as data with an interpreter).
+Our `Parser` is a generalized algebraic data type that *describes* a parser, but contains no functionality.
 
 However, if you try to implement an `Applicative` interface for just the above type, you'll find you can't do it.
 
@@ -374,16 +388,18 @@ Why? Because there's no way to implement `map` or `ap`. However, we can easily s
 
 ```scala
 sealed trait Parser[A]
-case class Header(name: String) extends Parser[String]
+case class Header(name: String, value: String) extends Parser[String]
 case class Query(name: String) extends Parser[String]
 case class Content[A](decoder: Array[Byte] => A) extends Parser[A]
 case class Pure[A](a: A) extends Parser[A]
 case class Apply[A, B](fa: Parser[A], ff: Parser[A => B]) extends Parser[B]
 ```
 
-The constructor `Apply` represent a *description* of mapping and application, but they perform no computation. Their types represent *promises* that such a computation is possible (while a type-safe implementation would represent a proof that such promises are actually possible to keep).
+The constructor `Apply` represent a *description* of application, but performs no computation.
 
-Now writing an `Applicative` instance for `Parser` is trivial:
+The types of the parsers represent *promises* that such computations are possible, while a type-safe implementation represents a proof that such promises are actually possible to honor.
+
+With this definition of `Parser`, writing an `Applicative` instance for `Parser` is trivial:
 
 ```scala
 implicit val ParserApplicative = new Applicative[Parser] {
@@ -395,15 +411,25 @@ implicit val ParserApplicative = new Applicative[Parser] {
 }
 ```
 
-This formulation turns out to be amazingly powerful.
+With this `Applicative` instance defined, we can build descriptions of web services using all the `Applicative` machinery that Scalaz brings to the table:
+
+```scala
+(Header("Content-Type", "application/json") |@| Query("limit"))((_, limit) => loadJsonData(limit))
+```
+
+(In Haskell, this would be much cleaner: `loadJsonData <$> header "Content-Type" "application/json" <*> query "limit"`.)
+
+If we fleshed out our parser a bit more, I'm sure you can see how we could concisely describe a web service.
+
+This formulation, which is very reminiscent of the `Free` monad (in that you're "recording" applications instead of actually performing them), turns out to be incredibly powerful.
 
 ### The Power of Applicatives
 
-With this `Applicative` representation, we can traverse the entire GADT representing our service description without first having any concrete values produced by an actual request.
+With this `Applicative` representation, we can traverse the entire GADT representing our service description without first having any values produced by an actual request.
 
-So we can use the same description to build multiple things in advance of serving requests.
+So we can use the same description to build multiple things before we ever have to serve a request.
 
-In particular, you can write a function to compile a service description down to a BlueEyes-style request handler:
+In particular, you can write a function to compile a service description down to a BlueEyes-style web service:
 
 ```scala
 def compile[A](parser: Parser[A]): HttpRequest => Future[HttpResponse] = ???
@@ -414,32 +440,70 @@ def compile[A](parser: Parser[A]): HttpRequest => Future[HttpResponse] = ???
 You can also write a function to compile a service description down to documentation:
 
 ```scala
-def document[A](parser: Parser[A]): String = ???
+def document[A](parser: Parser[A]): Markdown = ???
 ```
 
-In fact, for a more complex GADT, we could also write an "optimizer" that takes one description, and yields another one which is equivalent but has a more efficient compilation:
+In fact, for a more complex GADT than introduced above, we could also write an "optimizer" that takes one description, and yields another one which is equivalent but has a more efficient compilation:
 
 ```scala
 def optimize[A](parser: Parser[A]): Parser[A] = ???
 ```
 
-Even more incredibly, given a `Parser[A]`, we can create a generator for `A`'s that might be produced on some successful parse:
+Even more incredibly, given a `Parser[A]`, we can create a generator for `A`'s that would be produced for some possible input:
 
 ```scala
 def generate[A](parser: Parser[A]): EphemeralStream[A]
 ```
 
-(`EphemeralStream` is a Scalaz abstraction that doesn't leak memory like Scala's own Stream, but it's the same idea.)
+(`EphemeralStream` is a Scalaz abstraction that doesn't leak memory like Scala's own `Stream`, but it's the same idea.)
 
-This would allow us to create "example inputs" which we could use for documentation purposes (instead of having to manually construct examples that may or may not be in sync with what the web service actually accepts).
+This would allow us to create "example inputs" which we could use for documentation purposes, instead of having to manually construct examples that may or may not be in sync with what the web service actually accepts. We could also use them for load testing or for fuzz testing.
 
-Finally, the last magical feature of this representation I'll talk about is that in the event of a malformed request, we know exactly what went wrong (e.g. the `Header("Content-Type")` parser failed), and so we can generate helpful error messages or suggestions (e.g. "Expected Content-Type header to match 'application/json'").
+Finally, the last feature I'll mention is that in the event of a malformed request, we know exactly what went wrong (e.g. the `Header("Content-Type", "application/json")` parser failed), and so we can generate helpful error messages or suggestions (e.g. "Expected Content-Type header to equal 'application/json'").
 
 Wow! Starting to see the power of `Applicative`s yet?
 
-### Remaining Goals
+## Trouble in Paradise
 
-I've (roughly) shown how `Applicative`s allow us to describe our web service one time, and then use the same description to generate everything from an executable service to documentation.
+By the end of January 2014, I had sketched out a complete, if rudimentary interface to building web service descriptions using the "free Applicative" approach introduced here.
 
+Unfortunately, I started noticing some serious problems in this formulation.
 
+### Neglected Responses
+
+The first problem I noticed is that this solution elegantly describes requests, but complete ignores responses.
+
+While `Parser[A]` can be introspected, so you know the form of *input* required by the service, the `A` representing the value produced by the web service cannot be inspected until runtime (i.e. until a request is generated and a response is produced). Thus, you cannot statically analyze the form of response, and so you can't generate documentation or do anything else interesting.
+
+This means that our representation for web services is inherently one-sided. The input to the service is described very well, but the output is not described at all.
+
+I didn't consider this to be a *fatal* flaw in the approach. After all, usually everything but the structure of the response can be inferred from the request (for example, if a web service looks for the header `Accept: application/json`, it's a good bet the web service will respond with JSON content).
+
+Nonetheless, this flaw manifests itself in far more than just documentation.
+
+### Awful Client Libraries
+
+To auto-generate a client library, you need to know not only the structure of the request, but the shape of the response, as well.
+
+For example, if you don't know the content type of the response, then you'll have to leave it as text or binary. Exposing raw text or binary data to the user of a client library is not very useful (in fact, it rather defeats the point of a client library!).
+
+### No Remoting
+
+There's an unwritten law of web services: if you build a web service, you will ultimately end up consuming it &mdash; even if you wrote the web service for others to consume.
+
+Ideally, you'd like to be able to consume web services that you create with zero boilerplate and in a type-safe way.
+
+If I had my way, it would look something like this:
+
+```scala
+val serviceDesc = ???
+
+val remoteService = remotely(serviceDesc)("http://myservice.com/api/v1/", 40)
+
+val response = remoteService(request)
+```
+
+If something like this were possible, it would allow you to use the HTTP protocol for providing and consuming micro-services, in a completely type-safe and boilerplate-free way.
+
+*If* it were possible.
 
