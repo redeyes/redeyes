@@ -12,7 +12,7 @@ Eventually, RedEyes might be generalized to handle other text-oriented protocols
 
 # Preview
 
-The goal is to support the following syntax and set of features:
+The *goal* is to eventually support as much of the following syntax and set of features as possible:
 
 ```scala
 import redeyes.api._
@@ -45,7 +45,7 @@ RedEyes has an API for constructing services, but does not yet have a compiler t
 
 Many tests are missing and some of the interior surface area (especially the existing encoding of GADTs and the use of modules to reuse code across Char and Api parsers) could be greatly improved.
 
-Pull requests welcome!
+Pull requests are welcome! If you want something to work on, ping me and I'll give you a right-sized ticket.
 
 # Quick Start
 
