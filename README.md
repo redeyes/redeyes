@@ -10,6 +10,35 @@ RedEyes is intended to be laser-focused on the following goal:
 
 Eventually, RedEyes might be generalized to handle other text-oriented protocols.
 
+# Preview
+
+The goal is to support the following syntax and set of features (about 30% there).
+
+```scala
+import redeyes.api._
+
+val request: Api[Int] = 
+  GET >~>
+  path("/employees/") >~>
+  contentType("application/json") >~>
+  queryInt("limit")
+
+val response: Api[Json] = 
+  contentType("application/json") >~> content(JsonCodec)
+
+val listEmployees = serviceM(request, response) { limit =>
+  loadAllEmployees(limit).toJson
+}
+
+val docs: Markdown = document(listEmployees)
+
+val server: Task[Unit] = compileToServer(listEmployees)
+
+val remoteService: Int => Task[Json] = remotely(listEmployees)("localhost", 80)
+
+server.run
+```
+
 # Status
 
 RedEyes has an API for constructing services, but does not yet have a compiler to a specific server backend. The current plan is to produce a native backend for scalaz-stream over raw NIO. 
@@ -17,6 +46,10 @@ RedEyes has an API for constructing services, but does not yet have a compiler t
 Many tests are missing and some of the interior surface area (especially the existing encoding of GADTs and the use of modules to reuse code across Char and Api parsers) could be greatly improved.
 
 Pull requests welcome!
+
+# Quick Start
+
+TODO
 
 # History
 
