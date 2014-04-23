@@ -12,7 +12,7 @@ Eventually, RedEyes might be generalized to handle other text-oriented protocols
 
 # Preview
 
-The goal is to support the following syntax and set of features (about 30% there).
+The goal is to support the following syntax and set of features:
 
 ```scala
 import redeyes.api._
