@@ -678,9 +678,9 @@ Unfortunately, while trying to implement this method, I quickly discovered it's 
 
 Or more precisely, it's impossible to implement this function in terms of `ap`, `map`, or `point`.
 
-`Applicative`s heavily rely on the compositional properties of curried functions.
+The classic formulation of `Applicative` relies heavily on the compositional properties of curried functions.
 
-If you have a function of arity 2, and it's curried, you just have to call `ap` twice to apply each argument in turn. If your function is not curried, it's easy enough to curry it. This is how Scalaz implements all of the `liftN` and `applyN` functions defined in `Apply`.
+If you have a function of arity 2, and it's curried, you just call `ap` twice to apply each argument in turn. If your function is not curried, it's easy enough to curry it. This is how Scalaz implements all of the `liftN` and `applyN` functions defined in `Apply`.
 
 But interestingly, invertible functions cannot be curried!
 
