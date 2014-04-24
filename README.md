@@ -315,7 +315,6 @@ def map[A, B](fa: F[A])(f: A => B): F[B]
 def ap[A,B](fa: => F[A])(f: => F[A => B]): F[B]
 
 def point[A](a: => A): F[A]
-
 ```
 
 Compare this definition to the `Monad` type class, which inherits all of the above but adds the following functionality:
@@ -426,6 +425,7 @@ case class Query(name: String) extends Parser[String]
 case class Content[A](decoder: Array[Byte] => A) extends Parser[A]
 case class Pure[A](a: A) extends Parser[A]
 case class Apply[A, B](fa: Parser[A], ff: Parser[A => B]) extends Parser[B]
+...
 ```
 
 The constructor `Apply` represent a *description* of application, but performs no computation.
@@ -538,5 +538,174 @@ val response = remoteService(request)
 
 If something like this were possible, it would allow you to use the HTTP protocol for providing and consuming micro-services, in a completely type-safe and boilerplate-free way.
 
-*If* it were possible.
+*If only* it were possible.
+
+## Invertible Parsers
+
+I had no idea how to solve all of these issues, so I focused on just one issue: *invertible parsing*.
+
+Given an input, we can generate an `A` from it given a `Parser[A]`. However, given an `A`, we cannot generate an input.
+
+In other words, our parsers are *one-way*, like all classic parsers: they parse input to construct a value.
+
+Intuitively, it seemed to me if we could go both ways, I'd be able to solve some of the issues, and get closer to solving the rest.
+
+I dubbed this two-way parser an *invertible parser*.
+
+To understand why our existing parsers are one-way, it's enough to look at the type signatures.
+
+### Following the Arrows
+
+Our toy transformation parser, which allows Applicative-style transformation of values, is defined as follows:
+
+```scala
+case class Apply[A, B](fa: Parser[A], ff: Parser[A => B]) extends Parser[B]
+```
+
+Encoded in this definition (as well as the `Content` parser defined above) is one-way flow of information that prevents our parsers from being invertible.
+
+Specifically, for the function inside `Parser[A => B]`, information flows from `A` to `B`, the direction of the function arrow. That is, given an `A`, you can obtain a `B`, but having a `B`, there is no way to obtain an `A`.
+
+We can trace this requirement all the way back to `ap` in the `Applicative` interface:
+
+```scala
+def ap[A, B](fa: => Parser[A])(ff: Parser[A => B]): Parser[B] = Apply(fa, ff)
+```
+
+When I first saw this, I thought, "No problem! We'll just generalize over the function arrow so we can move from injections to bijections!"
+
+That is, instead of defining `Applicative` with functions, I thought I'd generalize to categories. Something like:
+
+```scala
+trait ApplicativeCat[F[_], C[_, _]] extends FunctorCat[F, C] with ApplyCat[F, C] {
+  def map[A, B](fa: F[A])(f: C[A, B]): F[B]
+
+  def ap[A,B](fa: => F[A])(f: => F[C[A, B]]): F[B]
+
+  def point[A](a: => A): F[A]
+}
+```
+
+This way, the ordinary `Applicative` type class could represent a specialization of `ApplicativeCat` to the category whose objects are sets and whose arrows are functions:
+
+```scala
+trait Applicative[F[_]] extends ApplicativeCat[F, Function1] {
+  ...
+}
+```
+
+The invertible `Applicative` would be free to specialize over a bijection (an invertible function). In Scalaz terminology:
+
+```scala
+trait IsoApplicative[F[_]] extends ApplicativeCat[F, IsoSet] {
+  ...
+}
+```
+
+However, since I don't have control of the Scalaz type class hierarchy, and because I'd need to specialize `ApplicativeCat` anyway, I decided to take a less general approach: creating a version of `Applicative` that was already specialized for bijections:
+
+```scala
+trait IsoApplicative[F[_]] {
+  def map[A, B](fa: F[A])(f: IsoSet[A, B]): F[B]
+
+  def ap[A,B](fa: => F[A])(f: => F[IsoSet[A, B]]): F[B]
+
+  def point[A](a: => A): F[A]
+}
+```
+
+Our corresponding `Parser` to support this interface would be:
+
+```scala
+sealed trait Parser[A]
+case class Header(name: String, value: String) extends Parser[String]
+case class Query(name: String) extends Parser[String]
+case class Content[A](decoder: IsoSet[Array[Byte], A]) extends Parser[A]
+case class Pure[A](a: A) extends Parser[A]
+case class Apply[A, B](fa: Parser[A], ff: Parser[IsoSet[A, B]]) extends Parser[B]
+...
+```
+
+This direction was sufficiently interesting to keep me plugging away.
+
+Unfortunately, it has a few fatal flaws.
+
+### The Bad Thing About No Entropy
+
+When I was much younger, I stumbled onto the extremely fascinating subject of [reversible computing](http://en.wikipedia.org/wiki/Reversible_computing).
+
+If a reversible computer existed, it could execute programs forward or backward. Such computers would accumulate no entropy.
+
+Unfortunately, reversible computers accumulate "garbage", which is information necessary to reverse a computation.
+
+Truly invertible parsers suffer the exact same problem.
+
+Let's take a little example from a parser for SQL created using Scala's parser combinators:
+
+```scala
+def select: Parser[SelectStmt] =
+  keyword("select") ~> projections ~
+    opt(relations) ~ opt(filter) ~
+    opt(group_by) ~ opt(order_by) ~ opt(limit) ~ opt(offset) <~ opt(op(";")) ^^ {
+  case p ~ r ~ f ~ g ~ o ~ l ~ off => SelectStmt(p, r.getOrElse(Nil), f, g, o, l, off)
+}
+```
+
+Notice the use of `~>` and `<~` combinators, which allow you to "throw away" the result of a parser that you don't need.
+
+In an invertible parser, you cannot throw away anything! The information content of keywords, whitespace, dots, comments, and everything else has to be preserved in its entirety. 
+
+Truly invertible parsers can't leak information!
+
+
+In the context of a web service, this means you can't really "ignore" headers you don't care about, whitespace that doesn't affect semantics, or anything else, really. You have to thread this information through your entire service description!
+
+That sure doesn't sound like fun...
+
+### Non-Compositional Application
+
+While spiking something similar to the `IsoApplicative` defined above, I realized I needed `lift2`, to lift a function of arity 2 into a function that works on two functors.
+
+For invertible parsers, the type signature would be as follows:
+
+```scala
+def lift2[A, B, C](f: IsoSet[(A, B), C]): (Parser[A], Parser[B]) => Parser[C]
+```
+
+Seems sensible enough, right?
+
+Unfortunately, while trying to implement this method, I quickly discovered it's just not possible!
+
+Or more precisely, it's impossible to implement this function in terms of `ap`, `map`, or `point`.
+
+`Applicative`s heavily rely on the compositional properties of curried functions.
+
+If you have a function of arity 2, and it's curried, you just have to call `ap` twice to apply each argument in turn. If your function is not curried, it's easy enough to curry it. This is how Scalaz implements all of the `liftN` and `applyN` functions defined in `Apply`.
+
+But interestingly, invertible functions cannot be curried!
+
+Let's take the arity 2 case:
+
+```scala
+def curry[A, B, C](fn2: IsoSet[(A, B), C]): IsoSet[A, IsoSet[B, C]] = ???
+```
+
+In order to implement this `curry` function, you would need to create the following functions to satisfy the bijection in the return value:
+
+```scala
+f : A => IsoSet[B, C]
+g : IsoSet[B, C] => A
+h : B => C
+i : C => B
+```
+
+You can't do it! The most problematic function is `g`, which promises to return an `A` given a `IsoSet[B, C]`. But since function equality is undefined, there's no way to keep this promise (try it if you don't believe me!).
+
+Thus, for an invertible `Applicative`, we can't compose function application, which means we're forever doomed to functions of arity 1.
+
+Or *are* we???
+
+Just because it's not possible to write `lift2` using `ap`, `map`, or `point`, doesn't mean it's impossible to write!
+
+## Will the Real RedEyes Parsers Please Stand Up?
 

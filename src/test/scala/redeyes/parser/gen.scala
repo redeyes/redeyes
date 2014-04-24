@@ -7,7 +7,7 @@ import CharParserCompiler._
 import org.scalacheck.{Prop, Gen, Properties}
 import org.scalacheck.Prop._
 
-object ExampleGeneratorTest extends Properties("ExampleGenerator") with ArbitraryParser {
+object GeneratorTest extends Properties("Generator") with ArbitraryParser {
   import CharParserCompiler._
   
   property("generate only generates examples that can be parsed") = forAll { (p: ParserWithExample) =>

@@ -10,7 +10,7 @@ import scalaz.std.vector._
 import scalaz.std.string._
 import scalaz.std.anyVal._
 
-trait CharParserModule extends ParserModule with ExampleGenerator {
+trait CharParserModule extends ParserModule with Generator {
   protected sealed trait CharSource
   protected type Channel = CharSource
   protected object CharSource extends Channel

@@ -4,7 +4,7 @@ import scalaz._
 
 import scalaz.syntax.monad._
 
-trait ExampleGenerator { self: ParserModule =>
+trait Generator { self: ParserModule =>
   protected def generateAtom[C <: Channel, A](channel: C, atom: Atom[C, A]): EphemeralStream[A]
   
   /**

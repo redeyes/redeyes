@@ -289,7 +289,7 @@ trait ParserModule { self =>
    * A parser that joins together the output of two other parsers (of the same type)
    * using a provided semigroup.
    *
-   * Note: This parser is redundant and is included only for performance reasons.
+   * FIXME: This parser is too powerful and needs restricting.
    */
   protected final case class Join[A: Semigroup](left: Need[Parser[A]], right: Need[Parser[A]]) extends Parser[A] {
     def semigroup: Semigroup[A] = Semigroup[A]
@@ -380,6 +380,8 @@ trait ParserModule { self =>
 
   /**
    * A parser that parsers one of two alternatives. This parser is left-biased.
+   *
+   * TODO: Find some way to seal the hierarchy so we can delete GetOrFail
    */
   protected final case class Or[A](left: Need[Parser[A]], right: Need[Parser[A]]) extends Parser[A] {
     def flatten: Vector[Need[Parser[A]]] = {
