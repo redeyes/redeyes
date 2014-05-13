@@ -83,7 +83,7 @@ trait ApiModule extends ParserModule {
     def intersect[C <: Channel, A: Equal](a1: Atom[C, A], a2: Atom[C, A]): Parser[A] = ???
   }
 
-  def AtomGenerator[C <: Channel, A](channel: C, atom: Atom[C, A]): EphemeralStream[A] = atom match {
+  protected def generateAtom[C <: Channel, A](channel: C, atom: Atom[C, A]): EphemeralStream[A] = atom match {
     case HeaderAtom(name, value)  => charParser.generate(value)
     case MethodAtom(name)         => charParser.generate(name)
     case QueryAtom(name, value)   => charParser.generate(value)

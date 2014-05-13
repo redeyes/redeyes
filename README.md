@@ -660,7 +660,7 @@ Truly invertible parsers can't leak information!
 
 In the context of a web service, this means you can't really "ignore" headers you don't care about, whitespace that doesn't affect semantics, or anything else, really. You have to thread this information through your entire service description!
 
-That sure doesn't sound like fun...
+That sure doesn't sound like fun...and it's not the only issue, either.
 
 ### Non-Compositional Application
 
@@ -699,7 +699,7 @@ h : B => C
 i : C => B
 ```
 
-You can't do it! The most problematic function is `g`, which promises to return an `A` given a `IsoSet[B, C]`. But since function equality is undefined, there's no way to keep this promise (try it if you don't believe me!).
+You can't do it! The most problematic function is `g`, which promises to return an `A` given a `IsoSet[B, C]`. But since function equality is undefined, there's no way you can keep this promise (try it if you don't believe me!).
 
 Thus, for an invertible `Applicative`, we can't compose function application, which means we're forever doomed to functions of arity 1.
 
@@ -708,4 +708,117 @@ Or *are* we???
 Just because it's not possible to write `lift2` using `ap`, `map`, or `point`, doesn't mean it's impossible to write!
 
 ## Will the Real RedEyes Parsers Please Stand Up?
+
+The first issue I tackled was the one of invertibility. Did I really need parsers that were truly and literally "invertible" in order to implement the features I was looking for?
+
+Turns out not.
+
+If you look at most grammars expressed using parser combinators, you'll see that information is often thrown away.
+
+In Scala's own parser combinators, you can use the operators `<~` to throw away the information parsed by the right operand, and `~>` to throw away the information parsed by the left operand.
+
+Applicative parser combinator libraries in Haskell use the operators `<*` and `*>` for a similar purpose.
+
+Why do parser combinators make it so easy to throw away information?
+
+Sometimes it's because the external syntax only helps the parser decide which production to generate. For example, the Scala keyword `def` which introduces a method definition, but the actual string `def` is not important to preserve during the parsing process).
+
+Other times, it's because a huge range of inputs are considered essentially equivalent. For example, no matter how many blank lines you insert between two statements in Scala, the Scala compiler will consider the program the same (blank lines between statements have no effect on the *semantics* of your program).
+
+The first class of "lossy" doesn't really restrict invertibility. After all, if you parse a `def`, for example, you have some sort of `MethodDefn` instance that represents the fact that a method was defined. So when inverting that, you can generate `def` quite simply.
+
+The second class of "lossy" is trickier, and to deal with it in a more formal fashion, I leaned on the notion of *equivalence relations*.
+
+### Equivalence Relations
+
+An [equivalence relation](http://en.wikipedia.org/wiki/Equivalence_relation) on a set `A` is a partitioning of its elements into subsets, such that all elements within each subset are defined as "equivalent" (the intersection of any two different partitions is empty since an element can belong to one and only one partition).
+
+Informally, you can think of an equivalence relation as a way of treating groups of elements as equivalent.
+
+That's essentially what we want to do for RedEyes: we'd like to treat a bunch of possible inputs as being *equivalent*. We can then settle on a "canonical input" for each partition, and when inverting the transformation, we can map the output to that canonical element.
+
+I'm sure there are other ways, but I settled on the following formalization:
+
+1. Let `R_A` be an equivalence relation on `A`.
+2. Let `R_B` be an equivalence relation on `B`.
+3. Let `[a]` be the equivalence class for `a` (that is, the set of all elements in `A` that are equivalent to `a`).
+4. Let `[b]` be the equivalence class for `b` (that is, the set of all elements in `B` that are equivalent to `b`).
+5. Let `C_A` be a function that maps an equivalence class in `A` to a choice of a single canonical element in `A`.
+6. Let `C_B` be a function that maps an equivalence class in `B` to a choice of a single canonical element in `B`.
+7. Let `f` be an invertible mapping between the set of all equivalence classes in `A` to the set of all equivalence classes in `B`.
+
+Now I define a new abstraction which I call `Equiv[A, B]`, which is defined by the following two functions `to` and `from`:
+
+```
+to(a) = C_B(f([a]))
+from(b) = C_A(f^(-1)([b]))
+```
+
+where `f^(-1)` denotes the inverse of `f`.
+
+While `Equiv[A, B]` is **not** a bijection &mdash; that is, it does *not* define an invertible function because multiple inputs could be mapped to the same output (and visa versa) &mdash; it possesses all the necessary and desirable properties to build invertible parsers!
+
+The choice functions represent our statement that a range of possible inputs (or outputs) are semantically equivalent to each other (if not in actual form).
+
+For obvious reasons, the above definition of `Equiv[A, B]` cannot be translated into code (unless you have a computer that can handle infinite sets!). So for reasons of practicality, I require the user to manually construct the `to` and `from` functions, which is the representation of `Equiv` that you'll find in the [RedEyes source code](https://github.com/redeyes/redeyes/blob/master/src/main/scala/redeyes/parser/equiv.scala).
+
+One down, one to go!
+
+### Equivalence Applicatives?
+
+As we've seen, it's not possible to curry invertible functions. For similar reasons, it's not possible to curry *equivalences* as I've defined them.
+
+When I first discovered this, for a second I lost all hope of building an invertible `Applicative` API. Then I realized that currying functions is really just a *means to an end*.
+
+That is, I never needed the *ability to curry*, only the ability to combine `n` applicatives into one and pass those `n` values to a user-defined function (so you can, say, parse a header and a query string parameter, and pass both of those to a function which turns them into a data structure of some kind).
+
+When I started thinking about the problem in this way, it occurred to me a much simpler interface would suffice: something akin to Scalaz's `Zip` type class:
+
+```scala
+trait Zip[F[_]]  {
+  def zip[A, B](a: => F[A], b: => F[B]): F[(A, B)]
+}
+```
+
+Zipping two functors together yields a functor of a tuple. Since you can map over a functor, you can also trivially invert this transformation without loss of information:
+
+```scala
+def unzip[F[_], A, B](fab: F[(A, B)])(implicit F: Functor[F]): (F[A], F[B]) = (F.map(fab)(_._1), F.map(fab)(_._2))
+```
+
+That demonstrates `Zip` is a lossless transformation, but does it allow us to write functions like `Applicative`'s `ap2`?
+
+Let's find out:
+
+```scala
+  def ap1[A,B](fa: => F[A])(f: => F[A <=> B]): F[B]  
+
+  final def ap2[A,B,Z](fa: => F[A], fb: => F[B])(ff: F[(A,B) <=> Z]): F[Z] = ap1(zip(fa, fb))(ff)
+```
+
+All this definition requires is `zip` and `ap1`! Thus, given an apply method for an arity 1 function, and a way to zip the functors together, we can create an apply method for an arity 2 function!
+
+Using `zip`, you can define a whole family of `zipN` functions (like `zip3`) as well as their corresponding `apN` apply functions.
+
+In other words, by requiring our parser functors implement `Zip`, and by supporting the base apply method, we can build up an infinite family of apply methods which can lift functions of arbitrary arity!
+
+Pretty neat, eh?
+
+As a side note, although I didn't know it at the time (I [found out](https://twitter.com/nuttycom/status/457631357166825473) *while* presenting RedEyes at [LambdaConf](http://degoesconsulting.com/lambdaconf)!), there's an [alternate formulation of applicatives](http://www.haskell.org/haskellwiki/Typeclassopedia#Alternative_formulation) that is equivalent to the normal definition.
+
+In Scala, it looks like this:
+
+```scala
+trait Monoidal[F[_]] extends Functor[F] {
+  def unit: F[Unit]
+
+  def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)]
+}
+```
+
+Now this formulation is as powerful as the classic formulation of `Applicative`s. However, if you try to use this form to write a curried `ap2`, you'll fail because you won't be able to create the equivalence.
+
+Now let's take a look at how all of this comes together in a beautiful, composable, and extremely powerful way.
+
+## RedEyes Parsers
 
